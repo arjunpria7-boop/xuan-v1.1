@@ -90,14 +90,22 @@ const callGenerativeModel = async (
     } catch (error) {
         console.error(`Error during Gemini API call for ${context}:`, error);
         if (error instanceof Error) {
-            if (error.message.includes('Kunci API harus disetel')) {
-                throw error;
+            const message = error.message;
+            // Handle specific, user-actionable errors first.
+            if (message.includes('429')) {
+                 throw new Error(`Anda telah melampaui kuota gratis saat ini. Untuk terus menggunakan layanan ini, harap periksa batas penggunaan Anda dan pertimbangkan untuk menyiapkan penagihan. Kunjungi https://ai.google.dev/gemini-api/docs/rate-limits untuk informasi lebih lanjut.`);
             }
-            if (error.message.includes('API key not valid')) {
+            if (message.includes('Kunci API harus disetel')) {
+                throw error; // Let the UI handle this specific state
+            }
+            if (message.includes('API key not valid')) {
                  throw new Error('Kunci API yang Anda berikan tidak valid. Silakan periksa kembali dan coba lagi.');
             }
-             throw new Error(`Tidak dapat terhubung ke layanan AI: ${error.message}. Periksa koneksi internet Anda dan coba lagi.`);
+            
+            // For other errors, provide a more generic message instead of raw JSON
+            throw new Error(`Terjadi kesalahan saat berkomunikasi dengan layanan AI. Silakan coba lagi nanti. Periksa konsol untuk detail teknis.`);
         }
+        // Fallback for non-Error objects
         throw new Error('Terjadi kesalahan yang tidak diketahui saat menghubungi layanan AI.');
     }
 }

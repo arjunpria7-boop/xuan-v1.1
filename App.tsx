@@ -15,7 +15,6 @@ import CropPanel from './components/CropPanel';
 import { UndoIcon, RedoIcon, EyeIcon, ErrorIcon, ZoomInIcon, KeyIcon } from './components/icons';
 import StartScreen from './components/StartScreen';
 import PreviewModal from './components/PreviewModal';
-import ApiKeyModal from './components/ApiKeyModal';
 
 
 // Helper to convert a data URL string to a File object
@@ -52,7 +51,6 @@ const App: React.FC = () => {
   const [aspect, setAspect] = useState<number | undefined>();
   const [isComparing, setIsComparing] = useState<boolean>(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
   const currentImage = history[historyIndex] ?? null;
@@ -61,18 +59,6 @@ const App: React.FC = () => {
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
   
-
-  // Check for API key on mount.
-  useEffect(() => {
-    const keyInStorage = localStorage.getItem('gemini_api_key');
-    // Using a timeout allows the main app to render first, feels smoother.
-    setTimeout(() => {
-        if (!process.env.API_KEY && !keyInStorage) {
-            setIsApiKeyModalOpen(true);
-        }
-    }, 500);
-  }, []);
-
   // Effect to create and revoke object URLs safely for the current image
   useEffect(() => {
     if (currentImage) {
@@ -114,15 +100,6 @@ const App: React.FC = () => {
     setCrop(undefined);
     setCompletedCrop(undefined);
   }, [history, historyIndex]);
-
-  const handleSaveApiKey = useCallback((key: string) => {
-    localStorage.setItem('gemini_api_key', key);
-    setIsApiKeyModalOpen(false);
-    // If user was in an error state from a missing key, clear it so they can proceed.
-    if (error && error.includes('Kunci API')) {
-        setError(null);
-    }
-  }, [error]);
 
   const handleImageUpload = useCallback((file: File) => {
     setError(null);
@@ -324,20 +301,43 @@ const App: React.FC = () => {
     setEditHotspot({ x: originalX, y: originalY });
 };
 
+  // Helper function to render text with clickable links
+  const renderErrorWithLinks = (text: string) => {
+    // Regex to find URLs and split the text by them
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+
+    return parts.map((part, index) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-red-300 transition-colors font-semibold"
+          >
+            {part}
+          </a>
+        );
+      }
+      // Return text part, ensuring it has a key
+      return <React.Fragment key={index}>{part}</React.Fragment>;
+    });
+  };
+
   const renderContent = () => {
-    if (error && error.includes('Kunci API')) {
+    const isApiKeyError = error && (error.includes('Kunci API') || error.includes('API_KEY'));
+
+    if (isApiKeyError) {
         return (
             <div className="text-center animate-fade-in bg-red-500/10 border border-red-500/20 p-8 rounded-lg max-w-2xl mx-auto flex flex-col items-center gap-4">
              <KeyIcon className="w-12 h-12 text-red-400" />
-             <h2 className="text-2xl font-bold text-red-300">Kunci API Diperlukan</h2>
+             <h2 className="text-2xl font-bold text-red-300">Konfigurasi Diperlukan</h2>
              <p className="text-md text-red-400 text-center">{error}</p>
-             <button
-                 onClick={() => setIsApiKeyModalOpen(true)}
-                 className="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-lg text-lg transition-colors flex items-center gap-2"
-               >
-                 <KeyIcon className="w-5 h-5" />
-                 Atur Kunci API
-             </button>
+             <p className="text-sm text-gray-400 text-center mt-2">
+                Aplikasi ini memerlukan kunci API Google Gemini yang valid untuk disetel sebagai variabel lingkungan <code>API_KEY</code>.
+             </p>
            </div>
          );
      }
@@ -346,7 +346,7 @@ const App: React.FC = () => {
            <div className="text-center animate-fade-in bg-red-500/10 border border-red-500/20 p-8 rounded-lg max-w-2xl mx-auto flex flex-col items-center gap-4">
             <ErrorIcon className="w-12 h-12 text-red-400" />
             <h2 className="text-2xl font-bold text-red-300">Terjadi Kesalahan</h2>
-            <p className="text-md text-red-400 text-center">{error}</p>
+            <p className="text-md text-red-400 text-center">{renderErrorWithLinks(error)}</p>
             <button
                 onClick={() => setError(null)}
                 className="mt-2 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg text-md transition-colors"
@@ -564,17 +564,10 @@ const App: React.FC = () => {
   
   return (
     <div className="min-h-screen text-gray-100 flex flex-col">
-      <Header onApiKeyClick={() => setIsApiKeyModalOpen(true)} />
+      <Header />
       <main className={`flex-grow w-full max-w-[1600px] mx-auto p-4 md:p-8 flex justify-center ${currentImage ? 'items-start' : 'items-center'}`}>
         {renderContent()}
       </main>
-      {isApiKeyModalOpen && (
-          <ApiKeyModal
-            onClose={() => setIsApiKeyModalOpen(false)}
-            onSave={handleSaveApiKey}
-            initialError={error && error.includes('Kunci API') ? error : undefined}
-          />
-      )}
       {isPreviewModalOpen && currentImageUrl && (
           <PreviewModal 
               imageUrl={currentImageUrl}
