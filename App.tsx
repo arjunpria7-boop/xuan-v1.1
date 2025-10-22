@@ -15,7 +15,7 @@ import CropPanel from './components/CropPanel';
 import { UndoIcon, RedoIcon, EyeIcon, ErrorIcon, ZoomInIcon } from './components/icons';
 import StartScreen from './components/StartScreen';
 import PreviewModal from './components/PreviewModal';
-import ApiKeyModal from './components/ApiKeyModal';
+
 
 // Helper to convert a data URL string to a File object
 const dataURLtoFile = (dataurl: string, filename: string): File => {
@@ -51,7 +51,6 @@ const App: React.FC = () => {
   const [aspect, setAspect] = useState<number | undefined>();
   const [isComparing, setIsComparing] = useState<boolean>(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
   const currentImage = history[historyIndex] ?? null;
@@ -60,13 +59,6 @@ const App: React.FC = () => {
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
   
-  // On initial load, check if an API key exists. If not, open the modal.
-  useEffect(() => {
-    const key = localStorage.getItem('gemini_api_key');
-    if (!key) {
-      setIsApiKeyModalOpen(true);
-    }
-  }, []);
 
   // Effect to create and revoke object URLs safely for the current image
   useEffect(() => {
@@ -93,22 +85,10 @@ const App: React.FC = () => {
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
-  
-  const handleSaveApiKey = (apiKey: string) => {
-    localStorage.setItem('gemini_api_key', apiKey);
-    setIsApiKeyModalOpen(false);
-    // If there was an API key error, clear it so the user can try again.
-    if (error?.includes('Kunci API')) {
-      setError(null);
-    }
-  };
 
   const handleError = useCallback((err: unknown) => {
     const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan yang tidak diketahui.';
     setError(errorMessage);
-    if (errorMessage.includes('Kunci API')) {
-      setIsApiKeyModalOpen(true);
-    }
     console.error(err);
   }, []);
 
@@ -330,10 +310,10 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-bold text-red-300">Terjadi Kesalahan</h2>
             <p className="text-md text-red-400 text-center">{error}</p>
             <button
-                onClick={() => error.includes('Kunci API') ? setIsApiKeyModalOpen(true) : setError(null)}
+                onClick={() => setError(null)}
                 className="mt-2 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg text-md transition-colors"
               >
-                {error.includes('Kunci API') ? 'Atur Kunci API' : 'Coba Lagi'}
+                Coba Lagi
             </button>
           </div>
         );
@@ -546,16 +526,10 @@ const App: React.FC = () => {
   
   return (
     <div className="min-h-screen text-gray-100 flex flex-col">
-      <Header onApiKeyClick={() => setIsApiKeyModalOpen(true)} />
+      <Header />
       <main className={`flex-grow w-full max-w-[1600px] mx-auto p-4 md:p-8 flex justify-center ${currentImage ? 'items-start' : 'items-center'}`}>
         {renderContent()}
       </main>
-      {isApiKeyModalOpen && (
-        <ApiKeyModal 
-            onClose={() => setIsApiKeyModalOpen(false)}
-            onSave={handleSaveApiKey}
-        />
-      )}
       {isPreviewModalOpen && currentImageUrl && (
           <PreviewModal 
               imageUrl={currentImageUrl}

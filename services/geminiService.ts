@@ -5,28 +5,6 @@
 
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
-// Mendeklarasikan properti global window untuk TypeScript
-// Ini akan diisi jika env.js ada
-declare global {
-  interface Window {
-    // Deprecated: API key tidak lagi dimuat dari global window.
-    // GEMINI_API_KEY?: string;
-  }
-}
-
-// Helper untuk mendapatkan Kunci API dari localStorage
-const getApiKey = (): string => {
-    // Kunci API secara eksklusif diambil dari localStorage,
-    // yang ditetapkan oleh pengguna melalui modal di UI.
-    const apiKeyFromLocalStorage = localStorage.getItem('gemini_api_key');
-    if (apiKeyFromLocalStorage) {
-        return apiKeyFromLocalStorage;
-    }
-
-    // Jika tidak ada kunci yang ditemukan, lempar kesalahan untuk memicu modal
-    throw new Error('Kunci API Gemini tidak ditemukan. Harap atur kunci API Anda di pengaturan.');
-}
-
 // Helper function to convert a File object to a Gemini API Part
 const fileToPart = async (file: File): Promise<{ inlineData: { mimeType: string; data: string; } }> => {
     const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -92,8 +70,7 @@ const callGenerativeModel = async (
     context: string
 ): Promise<string> => {
     try {
-        const apiKey = getApiKey();
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
         console.log(`Sending request to model '${modelName}' for ${context}...`);
         const response: GenerateContentResponse = await ai.models.generateContent({
@@ -106,10 +83,7 @@ const callGenerativeModel = async (
         console.error(`Error during Gemini API call for ${context}:`, error);
         if (error instanceof Error) {
             if (error.message.includes('API key not valid')) {
-                 throw new Error('Kunci API yang Anda berikan tidak valid. Harap periksa dan coba lagi.');
-            }
-            if (error.message.includes('Kunci API Gemini tidak ditemukan')) {
-                throw error; // Re-throw the exact error from getApiKey()
+                 throw new Error('Kunci API yang dikonfigurasi tidak valid. Harap periksa kembali.');
             }
              throw new Error(`Tidak dapat terhubung ke layanan AI: ${error.message}. Periksa koneksi internet Anda dan coba lagi.`);
         }
