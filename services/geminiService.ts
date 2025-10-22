@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 
 // Helper function to convert a File object to a Gemini API Part
 const fileToPart = async (file: File): Promise<{ inlineData: { mimeType: string; data: string; } }> => {
@@ -76,6 +76,9 @@ const callGenerativeModel = async (
         const response: GenerateContentResponse = await ai.models.generateContent({
             model: modelName,
             contents,
+            config: {
+                responseModalities: [Modality.IMAGE],
+            },
         });
         console.log(`Received response from model for ${context}.`, response);
         return handleApiResponse(response, context);
