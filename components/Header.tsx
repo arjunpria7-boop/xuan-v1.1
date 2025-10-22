@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import React from 'react';
+import { KeyIcon } from './icons';
 
 const SparkleIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -10,7 +11,7 @@ const SparkleIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-const Header: React.FC = () => {
+const Header: React.FC<{ onApiKeyClick: () => void }> = ({ onApiKeyClick }) => {
   return (
     <header className="w-full py-4 px-4 sm:px-8 border-b border-gray-700 bg-gray-800/30 backdrop-blur-sm sticky top-0 z-50 flex items-center justify-between">
       <div className="flex-1"></div>
@@ -21,6 +22,14 @@ const Header: React.FC = () => {
           </h1>
       </div>
       <div className="flex-1 flex justify-end">
+        <button
+          onClick={onApiKeyClick}
+          className="flex items-center gap-2 bg-gray-700/50 hover:bg-gray-700/80 text-gray-300 font-semibold py-2 px-4 rounded-lg transition-colors"
+          aria-label="Atur Kunci API"
+        >
+          <KeyIcon className="w-5 h-5" />
+          <span className="hidden sm:inline">Kunci API</span>
+        </button>
       </div>
     </header>
   );

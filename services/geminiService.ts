@@ -70,7 +70,12 @@ const callGenerativeModel = async (
     context: string
 ): Promise<string> => {
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const apiKey = process.env.API_KEY ?? localStorage.getItem('gemini_api_key');
+        if (!apiKey) {
+            throw new Error('Kunci API harus disetel. Silakan atur kunci API Anda untuk menggunakan aplikasi.');
+        }
+
+        const ai = new GoogleGenAI({ apiKey });
         
         console.log(`Sending request to model '${modelName}' for ${context}...`);
         const response: GenerateContentResponse = await ai.models.generateContent({
@@ -85,8 +90,11 @@ const callGenerativeModel = async (
     } catch (error) {
         console.error(`Error during Gemini API call for ${context}:`, error);
         if (error instanceof Error) {
+            if (error.message.includes('Kunci API harus disetel')) {
+                throw error;
+            }
             if (error.message.includes('API key not valid')) {
-                 throw new Error('Kunci API yang dikonfigurasi tidak valid. Harap periksa kembali.');
+                 throw new Error('Kunci API yang Anda berikan tidak valid. Silakan periksa kembali dan coba lagi.');
             }
              throw new Error(`Tidak dapat terhubung ke layanan AI: ${error.message}. Periksa koneksi internet Anda dan coba lagi.`);
         }
