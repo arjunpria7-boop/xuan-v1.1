@@ -66,7 +66,7 @@ const handleApiResponse = (
 
 const callGenerativeModel = async (
     modelName: string, 
-    contents: { parts: ({ text: string; } | { inlineData: { mimeType: string; data: string; }; })[] },
+    contents: ({ parts: ({ text: string; } | { inlineData: { mimeType: string; data: string; }; })[] })[],
     context: string
 ): Promise<string> => {
     try {
@@ -125,7 +125,7 @@ Kebijakan Keamanan & Etika:
 Keluaran: Kembalikan HANYA gambar akhir yang telah diedit. Jangan kembalikan teks.`;
     const textPart = { text: prompt };
 
-    return callGenerativeModel('gemini-2.5-flash-image', { parts: [originalImagePart, textPart] }, 'edit');
+    return callGenerativeModel('gemini-2.5-flash-image', [{ parts: [originalImagePart, textPart] }], 'edit');
 };
 
 /**
@@ -151,7 +151,7 @@ Kebijakan Keamanan & Etika:
 Keluaran: Kembalikan HANYA gambar akhir yang telah difilter. Jangan kembalikan teks.`;
     const textPart = { text: prompt };
 
-    return callGenerativeModel('gemini-2.5-flash-image', { parts: [originalImagePart, textPart] }, 'filter');
+    return callGenerativeModel('gemini-2.5-flash-image', [{ parts: [originalImagePart, textPart] }], 'filter');
 };
 
 /**
@@ -181,5 +181,5 @@ Kebijakan Keamanan & Etika:
 Keluaran: Kembalikan HANYA gambar akhir yang telah disesuaikan. Jangan kembalikan teks.`;
     const textPart = { text: prompt };
 
-    return callGenerativeModel('gemini-2.5-flash-image', { parts: [originalImagePart, textPart] }, 'adjustment');
+    return callGenerativeModel('gemini-2.5-flash-image', [{ parts: [originalImagePart, textPart] }], 'adjustment');
 };
