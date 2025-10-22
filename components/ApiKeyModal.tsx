@@ -35,7 +35,11 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onClose, onSave, initialError
           <p className="text-md text-gray-400">
             Untuk menggunakan aplikasi ini, Anda perlu memberikan kunci API Google Gemini Anda. Kunci Anda akan disimpan di browser Anda dan tidak akan dibagikan.
           </p>
-          {error && <p className="text-sm text-red-400 bg-red-500/10 p-2 rounded-md">{error}</p>}
+          <div className="text-left text-sm text-gray-500 bg-gray-900/50 p-3 rounded-lg border border-gray-700 mt-2 w-full">
+            <h4 className="font-semibold text-gray-400 mb-1">Tentang Kuota API</h4>
+            <p>Google Gemini menggunakan batas permintaan per menit (RPM), bukan total kuota bulanan. Karena itu, sisa kuota tidak dapat ditampilkan. Jika batas tercapai, aplikasi ini akan secara otomatis menunggu dan mencoba lagi untuk Anda.</p>
+          </div>
+          {error && <p className="text-sm text-red-400 bg-red-500/10 p-2 rounded-md mt-2">{error}</p>}
           <input
             type="password"
             value={apiKey}

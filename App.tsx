@@ -7,14 +7,15 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
 import { generateEditedImage, generateFilteredImage, generateAdjustedImage } from './services/geminiService';
-import Header from './components/Header';
+import Header, { type ApiStatus } from './components/Header';
 import Spinner from './components/Spinner';
 import FilterPanel from './components/FilterPanel';
 import AdjustmentPanel from './components/AdjustmentPanel';
 import CropPanel from './components/CropPanel';
-import { UndoIcon, RedoIcon, EyeIcon, ErrorIcon, ZoomInIcon, KeyIcon } from './components/icons';
+import { UndoIcon, RedoIcon, EyeIcon, ErrorIcon, ZoomInIcon } from './components/icons';
 import StartScreen from './components/StartScreen';
 import PreviewModal from './components/PreviewModal';
+import ApiKeyModal from './components/ApiKeyModal';
 
 
 // Helper to convert a data URL string to a File object
@@ -41,16 +42,20 @@ const App: React.FC = () => {
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [prompt, setPrompt] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editHotspot, setEditHotspot] = useState<{ x: number, y: number } | null>(null);
   const [displayHotspot, setDisplayHotspot] = useState<{ x: number, y: number } | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('retus');
+  const [apiStatus, setApiStatus] = useState<ApiStatus>('ready');
   
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const [aspect, setAspect] = useState<number | undefined>();
   const [isComparing, setIsComparing] = useState<boolean>(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
   const currentImage = history[historyIndex] ?? null;
@@ -58,6 +63,27 @@ const App: React.FC = () => {
 
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
+
+  // Check for API key on initial load
+  useEffect(() => {
+    const key = localStorage.getItem('gemini_api_key');
+    if (!key) {
+      setIsApiKeyModalOpen(true);
+      setApiKeyError('Selamat datang! Harap berikan kunci API Gemini Anda untuk memulai.');
+      setApiStatus('error');
+    }
+  }, []);
+
+  // Effect to manage API status based on loading messages and errors
+  useEffect(() => {
+    if (error) {
+      setApiStatus('error');
+    } else if (loadingMessage && loadingMessage.includes('Batas kuota')) {
+      setApiStatus('rate-limited');
+    } else if (!isLoading && !error) {
+      setApiStatus('ready');
+    }
+  }, [error, loadingMessage, isLoading]);
   
   // Effect to create and revoke object URLs safely for the current image
   useEffect(() => {
@@ -87,7 +113,15 @@ const App: React.FC = () => {
 
   const handleError = useCallback((err: unknown) => {
     const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan yang tidak diketahui.';
-    setError(errorMessage);
+     if (errorMessage.includes('API key not valid')) {
+      setIsApiKeyModalOpen(true);
+      setApiKeyError('Kunci API yang Anda berikan tidak valid. Silakan periksa kembali.');
+    } else if (errorMessage.includes('Kunci API harus disetel')) {
+       setIsApiKeyModalOpen(true);
+       setApiKeyError('Silakan atur kunci API Anda untuk menggunakan aplikasi.');
+    } else {
+      setError(errorMessage);
+    }
     console.error(err);
   }, []);
 
@@ -130,9 +164,10 @@ const App: React.FC = () => {
 
     setIsLoading(true);
     setError(null);
+    setLoadingMessage(null);
     
     try {
-        const editedImageUrl = await generateEditedImage(currentImage, prompt, editHotspot);
+        const editedImageUrl = await generateEditedImage(currentImage, prompt, editHotspot, setLoadingMessage);
         const newImageFile = dataURLtoFile(editedImageUrl, `edited-${Date.now()}.png`);
         addImageToHistory(newImageFile);
         setEditHotspot(null);
@@ -141,6 +176,7 @@ const App: React.FC = () => {
         handleError(err);
     } finally {
         setIsLoading(false);
+        setLoadingMessage(null);
     }
   }, [currentImage, prompt, editHotspot, addImageToHistory, handleError]);
   
@@ -152,15 +188,17 @@ const App: React.FC = () => {
     
     setIsLoading(true);
     setError(null);
-    
+    setLoadingMessage(null);
+
     try {
-        const filteredImageUrl = await generateFilteredImage(currentImage, filterPrompt);
+        const filteredImageUrl = await generateFilteredImage(currentImage, filterPrompt, setLoadingMessage);
         const newImageFile = dataURLtoFile(filteredImageUrl, `filtered-${Date.now()}.png`);
         addImageToHistory(newImageFile);
     } catch (err) {
         handleError(err);
     } finally {
         setIsLoading(false);
+        setLoadingMessage(null);
     }
   }, [currentImage, addImageToHistory, handleError]);
   
@@ -172,15 +210,17 @@ const App: React.FC = () => {
     
     setIsLoading(true);
     setError(null);
-    
+    setLoadingMessage(null);
+
     try {
-        const adjustedImageUrl = await generateAdjustedImage(currentImage, adjustmentPrompt);
+        const adjustedImageUrl = await generateAdjustedImage(currentImage, adjustmentPrompt, setLoadingMessage);
         const newImageFile = dataURLtoFile(adjustedImageUrl, `adjusted-${Date.now()}.png`);
         addImageToHistory(newImageFile);
     } catch (err) {
         handleError(err);
     } finally {
         setIsLoading(false);
+        setLoadingMessage(null);
     }
   }, [currentImage, addImageToHistory, handleError]);
 
@@ -279,6 +319,15 @@ const App: React.FC = () => {
       handleImageUpload(files[0]);
     }
   };
+  
+  const handleSaveApiKey = (key: string) => {
+    localStorage.setItem('gemini_api_key', key);
+    setIsApiKeyModalOpen(false);
+    setApiKeyError(null);
+    if (error && (error.includes('Kunci API') || error.includes('API key not valid'))) {
+        setError(null);
+    }
+  };
 
   const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
     if (activeTab !== 'retus') return;
@@ -327,20 +376,6 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    const isApiKeyError = error && (error.includes('Kunci API') || error.includes('API_KEY'));
-
-    if (isApiKeyError) {
-        return (
-            <div className="text-center animate-fade-in bg-red-500/10 border border-red-500/20 p-8 rounded-lg max-w-2xl mx-auto flex flex-col items-center gap-4">
-             <KeyIcon className="w-12 h-12 text-red-400" />
-             <h2 className="text-2xl font-bold text-red-300">Konfigurasi Diperlukan</h2>
-             <p className="text-md text-red-400 text-center">{error}</p>
-             <p className="text-sm text-gray-400 text-center mt-2">
-                Aplikasi ini memerlukan kunci API Google Gemini yang valid untuk disetel sebagai variabel lingkungan <code>API_KEY</code>.
-             </p>
-           </div>
-         );
-     }
     if (error) {
        return (
            <div className="text-center animate-fade-in bg-red-500/10 border border-red-500/20 p-8 rounded-lg max-w-2xl mx-auto flex flex-col items-center gap-4">
@@ -348,7 +383,13 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-bold text-red-300">Terjadi Kesalahan</h2>
             <p className="text-md text-red-400 text-center">{renderErrorWithLinks(error)}</p>
             <button
-                onClick={() => setError(null)}
+                onClick={() => {
+                  setError(null)
+                  // If it was a key error, re-opening the modal is a good UX
+                  if (error.includes('Kunci API') || error.includes('API key not valid')) {
+                    setIsApiKeyModalOpen(true);
+                  }
+                }}
                 className="mt-2 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg text-md transition-colors"
               >
                 Coba Lagi
@@ -402,6 +443,7 @@ const App: React.FC = () => {
             {isLoading && (
                 <div className="absolute inset-0 bg-black/70 z-30 flex flex-col items-center justify-center gap-4 animate-fade-in">
                     <Spinner />
+                    {loadingMessage && <p className="text-lg text-gray-300 font-semibold text-center px-4">{loadingMessage}</p>}
                 </div>
             )}
             
@@ -564,7 +606,10 @@ const App: React.FC = () => {
   
   return (
     <div className="min-h-screen text-gray-100 flex flex-col">
-      <Header />
+      <Header 
+        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)} 
+        apiStatus={apiStatus} 
+      />
       <main className={`flex-grow w-full max-w-[1600px] mx-auto p-4 md:p-8 flex justify-center ${currentImage ? 'items-start' : 'items-center'}`}>
         {renderContent()}
       </main>
@@ -573,6 +618,18 @@ const App: React.FC = () => {
               imageUrl={currentImageUrl}
               onClose={() => setIsPreviewModalOpen(false)}
           />
+      )}
+      {isApiKeyModalOpen && (
+        <ApiKeyModal
+          onClose={() => {
+            // Only allow closing if a key already exists
+            if (localStorage.getItem('gemini_api_key')) {
+              setIsApiKeyModalOpen(false);
+            }
+          }}
+          onSave={handleSaveApiKey}
+          initialError={apiKeyError}
+        />
       )}
     </div>
   );

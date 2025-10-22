@@ -67,47 +67,92 @@ const handleApiResponse = (
 const callGenerativeModel = async (
     modelName: string, 
     contents: ({ parts: ({ text: string; } | { inlineData: { mimeType: string; data: string; }; })[] })[],
-    context: string
+    context: string,
+    setLoadingMessage: (message: string | null) => void
 ): Promise<string> => {
-    try {
-        const apiKey = process.env.API_KEY ?? localStorage.getItem('gemini_api_key');
-        if (!apiKey) {
-            throw new Error('Kunci API harus disetel. Silakan atur kunci API Anda untuk menggunakan aplikasi.');
-        }
+    const MAX_RETRIES = 3;
+    let lastError: Error | null = null;
 
-        const ai = new GoogleGenAI({ apiKey });
-        
-        console.log(`Sending request to model '${modelName}' for ${context}...`);
-        const response: GenerateContentResponse = await ai.models.generateContent({
-            model: modelName,
-            contents,
-            config: {
-                responseModalities: [Modality.IMAGE],
-            },
-        });
-        console.log(`Received response from model for ${context}.`, response);
-        return handleApiResponse(response, context);
-    } catch (error) {
-        console.error(`Error during Gemini API call for ${context}:`, error);
-        if (error instanceof Error) {
-            const message = error.message;
-            // Handle specific, user-actionable errors first.
-            if (message.includes('429')) {
-                 throw new Error(`Anda telah melampaui kuota gratis saat ini. Untuk terus menggunakan layanan ini, harap periksa batas penggunaan Anda dan pertimbangkan untuk menyiapkan penagihan. Kunjungi https://ai.google.dev/gemini-api/docs/rate-limits untuk informasi lebih lanjut.`);
+    const apiKey = process.env.API_KEY ?? localStorage.getItem('gemini_api_key');
+    if (!apiKey) {
+        throw new Error('Kunci API harus disetel. Silakan atur kunci API Anda untuk menggunakan aplikasi.');
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+            console.log(`Sending request to model '${modelName}' for ${context} (attempt ${attempt + 1})...`);
+            
+            // Clear message on initial attempt, keep for retries
+            if (attempt === 0) {
+              setLoadingMessage(null);
             }
-            if (message.includes('Kunci API harus disetel')) {
-                throw error; // Let the UI handle this specific state
-            }
-            if (message.includes('API key not valid')) {
-                 throw new Error('Kunci API yang Anda berikan tidak valid. Silakan periksa kembali dan coba lagi.');
+
+            const response: GenerateContentResponse = await ai.models.generateContent({
+                model: modelName,
+                contents,
+                config: {
+                    responseModalities: [Modality.IMAGE],
+                },
+            });
+
+            console.log(`Received response from model for ${context}.`, response);
+            return handleApiResponse(response, context);
+        } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+            console.error(`Attempt ${attempt + 1} failed for ${context}:`, error);
+
+            if (lastError.message.includes('429') && attempt < MAX_RETRIES - 1) {
+                const delay = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
+                
+                console.log(`Rate limit hit. Retrying in ${delay}ms...`);
+                
+                const countdownPromise = (duration: number) => {
+                    return new Promise<void>(resolve => {
+                        let secondsLeft = Math.ceil(duration / 1000);
+                        const updateMessage = () => {
+                            setLoadingMessage(`Batas kuota per menit tercapai. Mencoba lagi dalam ${secondsLeft} detik...`);
+                        };
+                        
+                        updateMessage();
+
+                        const interval = setInterval(() => {
+                            secondsLeft--;
+                            if (secondsLeft > 0) {
+                                updateMessage();
+                            } else {
+                                clearInterval(interval);
+                                resolve();
+                            }
+                        }, 1000);
+                    });
+                };
+
+                await countdownPromise(delay);
+                continue; 
             }
             
-            // For other errors, provide a more generic message instead of raw JSON
-            throw new Error(`Terjadi kesalahan saat berkomunikasi dengan layanan AI. Silakan coba lagi nanti. Periksa konsol untuk detail teknis.`);
+            break;
         }
-        // Fallback for non-Error objects
-        throw new Error('Terjadi kesalahan yang tidak diketahui saat menghubungi layanan AI.');
     }
+    
+    console.error(`All retries failed for ${context}. Final error:`, lastError);
+    if (lastError) {
+        const message = lastError.message;
+        if (message.includes('429')) {
+             throw new Error(`Kuota gratis per menit terlampaui dan percobaan ulang otomatis gagal. Untuk melanjutkan, harap aktifkan penagihan untuk proyek Google Cloud Anda. Kunjungi https://ai.google.dev/gemini-api/docs/billing untuk panduan.`);
+        }
+        if (message.includes('Kunci API harus disetel')) {
+            throw lastError;
+        }
+        if (message.includes('API key not valid')) {
+             throw new Error('Kunci API yang Anda berikan tidak valid. Silakan periksa kembali dan coba lagi.');
+        }
+        throw new Error(`Terjadi kesalahan saat berkomunikasi dengan layanan AI. Silakan coba lagi nanti. Periksa konsol untuk detail teknis.`);
+    }
+
+    throw new Error('Terjadi kesalahan yang tidak diketahui saat menghubungi layanan AI.');
 }
 
 
@@ -121,7 +166,8 @@ const callGenerativeModel = async (
 export const generateEditedImage = async (
     originalImage: File,
     userPrompt: string,
-    hotspot: { x: number, y: number }
+    hotspot: { x: number, y: number },
+    setLoadingMessage: (message: string | null) => void
 ): Promise<string> => {
     console.log('Starting generative edit at:', hotspot);
     
@@ -141,7 +187,7 @@ Kebijakan Keamanan & Etika:
 Keluaran: Kembalikan HANYA gambar akhir yang telah diedit. Jangan kembalikan teks.`;
     const textPart = { text: prompt };
 
-    return callGenerativeModel('gemini-2.5-flash-image', [{ parts: [originalImagePart, textPart] }], 'edit');
+    return callGenerativeModel('gemini-2.5-flash-image', [{ parts: [originalImagePart, textPart] }], 'edit', setLoadingMessage);
 };
 
 /**
@@ -153,6 +199,7 @@ Keluaran: Kembalikan HANYA gambar akhir yang telah diedit. Jangan kembalikan tek
 export const generateFilteredImage = async (
     originalImage: File,
     filterPrompt: string,
+    setLoadingMessage: (message: string | null) => void
 ): Promise<string> => {
     console.log(`Starting filter generation: ${filterPrompt}`);
     
@@ -167,7 +214,7 @@ Kebijakan Keamanan & Etika:
 Keluaran: Kembalikan HANYA gambar akhir yang telah difilter. Jangan kembalikan teks.`;
     const textPart = { text: prompt };
 
-    return callGenerativeModel('gemini-2.5-flash-image', [{ parts: [originalImagePart, textPart] }], 'filter');
+    return callGenerativeModel('gemini-2.5-flash-image', [{ parts: [originalImagePart, textPart] }], 'filter', setLoadingMessage);
 };
 
 /**
@@ -179,6 +226,7 @@ Keluaran: Kembalikan HANYA gambar akhir yang telah difilter. Jangan kembalikan t
 export const generateAdjustedImage = async (
     originalImage: File,
     adjustmentPrompt: string,
+    setLoadingMessage: (message: string | null) => void
 ): Promise<string> => {
     console.log(`Starting global adjustment generation: ${adjustmentPrompt}`);
     
@@ -197,5 +245,5 @@ Kebijakan Keamanan & Etika:
 Keluaran: Kembalikan HANYA gambar akhir yang telah disesuaikan. Jangan kembalikan teks.`;
     const textPart = { text: prompt };
 
-    return callGenerativeModel('gemini-2.5-flash-image', [{ parts: [originalImagePart, textPart] }], 'adjustment');
+    return callGenerativeModel('gemini-2.5-flash-image', [{ parts: [originalImagePart, textPart] }], 'adjustment', setLoadingMessage);
 };
